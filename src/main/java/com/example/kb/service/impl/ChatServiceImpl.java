@@ -22,6 +22,7 @@ import com.example.kb.service.KnowledgeBaseService;
 import com.example.kb.vector.ChunkVector;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -60,6 +61,8 @@ public class ChatServiceImpl implements ChatService {
     private final KbProperties kbProperties;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate redisTemplate;
+    /** 删除会话时要一起清掉对话记忆，否则记忆表里会留孤儿数据 */
+    private final ChatMemory chatMemory;
 
     public ChatServiceImpl(ConversationMapper conversationMapper,
                            MessageMapper messageMapper,
@@ -70,7 +73,8 @@ public class ChatServiceImpl implements ChatService {
                            ConversationMemorySeeder memorySeeder,
                            KbProperties kbProperties,
                            ObjectMapper objectMapper,
-                           StringRedisTemplate redisTemplate) {
+                           StringRedisTemplate redisTemplate,
+                           ChatMemory chatMemory) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.documentMapper = documentMapper;
@@ -81,6 +85,7 @@ public class ChatServiceImpl implements ChatService {
         this.kbProperties = kbProperties;
         this.objectMapper = objectMapper;
         this.redisTemplate = redisTemplate;
+        this.chatMemory = chatMemory;
     }
 
     @Override
@@ -113,6 +118,22 @@ public class ChatServiceImpl implements ChatService {
                 .eq(Message::getConversationId, conversation.getId())
                 .orderByAsc(Message::getId));
         return result.getRecords();
+    }
+
+    @Override
+    public void deleteConversation(Long conversationId) {
+        // 先校验归属，避免删别人的会话
+        Conversation conversation = requireConversation(conversationId);
+        messageMapper.delete(new LambdaQueryWrapper<Message>()
+                .eq(Message::getConversationId, conversation.getId()));
+        conversationMapper.deleteById(conversation.getId());
+        // 记忆是独立存储（Redis + MySQL），不跟着业务表删就会变成孤儿数据
+        try {
+            chatMemory.clear(String.valueOf(conversation.getId()));
+        } catch (Exception e) {
+            log.warn("清理对话记忆失败 conversationId={}", conversationId, e);
+        }
+        log.info("会话已删除 conversationId={} messages={}", conversationId, conversation.getMessageCount());
     }
 
     @Override

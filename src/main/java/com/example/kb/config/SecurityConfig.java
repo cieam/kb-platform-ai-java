@@ -1,5 +1,6 @@
 package com.example.kb.config;
 
+import jakarta.servlet.DispatcherType;
 import com.example.kb.controller.SpaForwardController;
 import com.example.kb.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
@@ -66,6 +67,10 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // SSE（SseEmitter）结束时会再走一次 ASYNC 派发，此时 SecurityContext
+                        // 已经不在请求线程上，如果不放行就会抛 Access Denied，
+                        // 响应头早已发出，浏览器表现为「网络中断」——必须显式放行。
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers(WHITELIST).permitAll()
                         .anyRequest().authenticated())
                 // 未登录时也返回统一返回体，前端才好统一处理
