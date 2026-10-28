@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.Tika;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -29,6 +30,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -56,6 +58,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final LangChainTextSplitter textSplitter;
     private final KbProperties kbProperties;
     private final ThreadPoolTaskExecutor aiExecutor;
+    private final StringRedisTemplate redisTemplate;
 
     public DocumentServiceImpl(KbDocumentMapper documentMapper,
                                KnowledgeBaseService knowledgeBaseService,
@@ -63,7 +66,8 @@ public class DocumentServiceImpl implements DocumentService {
                                AiClient aiClient,
                                LangChainTextSplitter textSplitter,
                                KbProperties kbProperties,
-                               @Qualifier(AsyncConfig.AI_EXECUTOR) ThreadPoolTaskExecutor aiExecutor) {
+                               @Qualifier(AsyncConfig.AI_EXECUTOR) ThreadPoolTaskExecutor aiExecutor,
+                               StringRedisTemplate redisTemplate) {
         this.documentMapper = documentMapper;
         this.knowledgeBaseService = knowledgeBaseService;
         this.vectorRepository = vectorRepository;
@@ -71,6 +75,7 @@ public class DocumentServiceImpl implements DocumentService {
         this.textSplitter = textSplitter;
         this.kbProperties = kbProperties;
         this.aiExecutor = aiExecutor;
+        this.redisTemplate = redisTemplate;
     }
 
     @Override
@@ -157,6 +162,9 @@ public class DocumentServiceImpl implements DocumentService {
             document.setErrorMsg(null);
             document.setParseCostMs(System.currentTimeMillis() - start);
             documentMapper.updateById(document);
+            // 文档内容变了，之前基于旧内容生成的问答缓存必须失效，
+            // 否则用户会一直拿到旧答案（缓存 TTL 30 分钟也够误导人）
+            clearAnswerCache(document.getKbId());
             log.info("文档解析完成 docId={} chunkCount={} costMs={}",
                     docId, enriched.size(), document.getParseCostMs());
         } catch (Exception e) {
@@ -192,6 +200,7 @@ public class DocumentServiceImpl implements DocumentService {
         documentMapper.deleteById(id);
         vectorRepository.deleteByDocId(id);
         knowledgeBaseService.increaseDocCount(document.getKbId(), -1);
+        clearAnswerCache(document.getKbId());
         try {
             Files.deleteIfExists(Paths.get(document.getFilePath()));
         } catch (IOException e) {
@@ -241,6 +250,25 @@ public class DocumentServiceImpl implements DocumentService {
     private static String extensionOf(String fileName) {
         int index = fileName.lastIndexOf('.');
         return index < 0 ? "" : fileName.substring(index + 1).toLowerCase();
+    }
+
+    /**
+     * 清掉某个知识库下的问答缓存。
+     *
+     * <p>这里用 KEYS 是因为单库缓存量很小（一个问题一个 key）；
+     * 生产环境换成 SCAN 游标遍历，避免大 key 空间下阻塞 Redis。
+     */
+    private void clearAnswerCache(Long kbId) {
+        try {
+            Set<String> keys = redisTemplate.keys("kb:answer:" + kbId + ":*");
+            if (keys != null && !keys.isEmpty()) {
+                redisTemplate.delete(keys);
+                log.info("知识库 {} 的问答缓存已清理 {} 条", kbId, keys.size());
+            }
+        } catch (Exception e) {
+            // 缓存清理失败不能影响文档处理结果
+            log.warn("清理问答缓存失败 kbId={}", kbId, e);
+        }
     }
 
     private static String trim(String text, int max) {
