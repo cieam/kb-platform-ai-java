@@ -137,6 +137,36 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
+    public int deleteConversations(List<Long> conversationIds) {
+        if (conversationIds == null || conversationIds.isEmpty()) {
+            return 0;
+        }
+        // 一次性把"属于当前用户"的会话筛出来：越权的 ID 直接忽略，不报错也不删
+        List<Conversation> owned = conversationMapper.selectList(new LambdaQueryWrapper<Conversation>()
+                .in(Conversation::getId, conversationIds)
+                .eq(Conversation::getUserId, UserContext.getUserId()));
+        if (owned.isEmpty()) {
+            return 0;
+        }
+        List<Long> ownedIds = owned.stream().map(Conversation::getId).toList();
+
+        // 消息和会话各一条 SQL，避免循环里逐条删
+        messageMapper.delete(new LambdaQueryWrapper<Message>()
+                .in(Message::getConversationId, ownedIds));
+        conversationMapper.deleteBatchIds(ownedIds);
+
+        for (Long id : ownedIds) {
+            try {
+                chatMemory.clear(String.valueOf(id));
+            } catch (Exception e) {
+                log.warn("清理对话记忆失败 conversationId={}", id, e);
+            }
+        }
+        log.info("批量删除会话完成，请求 {} 条，实际删除 {} 条", conversationIds.size(), ownedIds.size());
+        return ownedIds.size();
+    }
+
+    @Override
     public ChatResultVO ask(Long kbId, Long conversationId, String question, Consumer<String> onDelta) {
         knowledgeBaseService.getOwned(kbId);
 

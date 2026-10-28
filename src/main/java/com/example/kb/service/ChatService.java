@@ -24,4 +24,9 @@ public interface ChatService {
      * 删除会话：同时清掉会话下的消息与对话记忆，避免留下孤儿数据。
      */
     void deleteConversation(Long conversationId);
+
+    /**
+     * 批量删除会话。只删除属于当前用户的那些，返回实际删除条数。
+     */
+    int deleteConversations(List<Long> conversationIds);
 }

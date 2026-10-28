@@ -2,6 +2,7 @@ package com.example.kb.controller;
 
 import com.example.kb.common.result.R;
 import com.example.kb.config.AsyncConfig;
+import com.example.kb.domain.dto.BatchIdsRequest;
 import com.example.kb.domain.dto.ChatRequest;
 import com.example.kb.domain.entity.Conversation;
 import com.example.kb.domain.entity.Message;
@@ -73,6 +74,12 @@ public class ChatController {
     public R<Void> deleteConversation(@PathVariable Long id) {
         chatService.deleteConversation(id);
         return R.ok();
+    }
+
+    @Operation(summary = "批量删除会话，返回实际删除条数")
+    @DeleteMapping("/conversation/batch")
+    public R<Integer> deleteConversations(@RequestBody @Valid BatchIdsRequest request) {
+        return R.ok(chatService.deleteConversations(request.getIds()));
     }
 
     @Operation(summary = "普通问答（调试方便，等全部生成完才返回）")
