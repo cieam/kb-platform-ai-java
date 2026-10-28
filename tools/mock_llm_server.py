@@ -92,6 +92,27 @@ def build_answer(prompt):
     if not chunks:
         return "根据现有资料无法回答该问题。"
 
+    # 「这个库收录了什么 / 总结一下」这类元问题，没有哪一段能直接回答，
+    # 按文档汇总给出概览，比硬挑一句更像样。
+    meta_hints = ("收录", "包含哪些", "有哪些内容", "都有什么", "讲了什么", "讲了哪些", "总结", "概览")
+    if any(hint in question for hint in meta_hints):
+        overview = []
+        seen = set()
+        for index, text in chunks:
+            text = text.strip()
+            match = re.match(r"^【(.+?)】", text)
+            name = match.group(1) if match else f"资料{index}"
+            if name in seen:
+                continue
+            seen.add(name)
+            body = text[match.end():] if match else text
+            parts = [p.strip() for p in re.split(r"[。；\n]", body)]
+            first = next((p for p in parts if len(p) >= 10 and not p.startswith("#")), "")
+            first = first.lstrip("# ").strip()
+            overview.append(f"- {name}：{first[:60]}")
+        return ("当前知识库检索到的资料如下：\n" + "\n".join(overview) +
+                f"\n\n（本地 mock 模型：按文档汇总；接入真实模型后会生成完整摘要）[{chunks[0][0]}]")
+
     query_grams = _bigrams(question)
     index, text = max(chunks, key=lambda c: len(query_grams & _bigrams(c[1])))
 
