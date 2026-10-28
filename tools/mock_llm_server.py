@@ -17,6 +17,7 @@
 import base64
 import json
 import math
+import re
 import struct
 import sys
 import threading
@@ -45,17 +46,77 @@ def embed(text):
     return [v / norm for v in vector]
 
 
+def _bigrams(text):
+    text = re.sub(r"\s+", "", text or "")
+    return {text[i:i + 2] for i in range(len(text) - 1)}
+
+
+def _parse_chunks(block):
+    """把 Prompt 里的参考资料块解析成 [(序号, 文本)]。"""
+    chunks = []
+    current = None
+    for line in block.splitlines():
+        match = re.match(r"^\[(\d+)\]\s*(.*)$", line)
+        if match:
+            if current:
+                chunks.append(current)
+            current = [int(match.group(1)), match.group(2)]
+        elif current is not None:
+            current[1] += "\n" + line
+    if current:
+        chunks.append(current)
+    return chunks
+
+
 def build_answer(prompt):
-    """从 Prompt 里抽出参考资料，拼一句带引用的占位回答。"""
-    context = ""
-    if "【参考资料】" in prompt:
-        context = prompt.split("【参考资料】", 1)[1]
-        if "【用户问题】" in context:
-            context = context.split("【用户问题】", 1)[0]
-    context = " ".join(context.split())[:160]
-    if not context:
-        return "[mock] 没有收到参考资料，无法回答。"
-    return f"[mock 模型] 根据检索到的资料：{context} ……（占位回答，用于验证链路）[1]"
+    """从 Prompt 里抽出参考资料，模拟一个"摘录式"的 RAG 回答。
+
+    注意：按 "【参考资料】\\n" 这个带换行的段落标题切分。
+    Prompt 开头还有一句「请严格依据【参考资料】回答」，按不带换行的关键字切
+    会把规则说明也当成资料，回答就会变成复述 Prompt——这正是之前的现象。
+    """
+    marker = "【参考资料】\n"
+    if marker not in prompt:
+        return "根据现有资料无法回答该问题。"
+
+    block = prompt.split(marker, 1)[1]
+    for stop in ("【历史对话】", "【用户问题】"):
+        if stop in block:
+            block = block.split(stop, 1)[0]
+
+    question = ""
+    if "【用户问题】" in prompt:
+        question = prompt.split("【用户问题】", 1)[1].strip()
+
+    chunks = _parse_chunks(block)
+    if not chunks:
+        return "根据现有资料无法回答该问题。"
+
+    query_grams = _bigrams(question)
+    index, text = max(chunks, key=lambda c: len(query_grams & _bigrams(c[1])))
+
+    text = text.strip()
+    source = "参考资料"
+    match = re.match(r"^【(.+?)】", text)
+    if match:
+        source = match.group(1)
+        text = text[match.end():]
+
+    sentences = [part.strip() for part in re.split(r"[。；\n]", text) if part.strip()]
+
+    def sentence_score(sentence):
+        # 小标题（## 二、调休规则）里往往包含问题关键词，但信息量很低，直接压掉
+        if sentence.startswith("#") or len(sentence) < 8:
+            return -1
+        overlap = len(query_grams & _bigrams(sentence))
+        # 同样命中数时，优先选信息量更大的长句
+        return overlap * 2 + min(len(sentence), 80) / 80
+
+    best_line = max(sentences, key=sentence_score) if sentences else text[:120]
+    best_line = best_line.lstrip("# ").strip()
+
+    return (f"根据《{source}》第 {index} 段：{best_line}。\n\n"
+            f"（当前为本地 mock 模型，直接摘录命中片段；接入真实模型后为生成式回答）[{index}]")
 
 
 class Handler(BaseHTTPRequestHandler):
