@@ -23,6 +23,10 @@
 | 流式输出 | SSE 逐字返回，前端 fetch + ReadableStream 消费 |
 | 多用户隔离 | JWT 鉴权 + 知识库归属校验，越权访问返回 403 |
 
+## 界面预览
+
+![登录页](docs/screenshot-login.png)
+
 ## 系统架构
 
 ```mermaid

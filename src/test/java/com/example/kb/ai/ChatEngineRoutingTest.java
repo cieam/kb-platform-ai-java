@@ -18,8 +18,8 @@ class ChatEngineRoutingTest {
         KbProperties properties = new KbProperties();
         properties.getAi().getLocal().setEnabled(localEnabled);
         properties.getAi().getLocal().setMaxQuestionLength(maxLength);
-        // 只测路由判断，ChatClient / 工具都不参与，传 null 即可
-        return new ChatEngine(null, null, null, properties);
+        // 只测路由判断，模型注册表 / 工具 / 模拟实现都不参与，传 null 即可
+        return new ChatEngine(null, null, properties, null);
     }
 
     @Test
