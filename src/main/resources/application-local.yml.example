@@ -1,0 +1,61 @@
+# 本地开发环境配置模板
+# 用法：复制为 application-local.yml（该文件已被 .gitignore 忽略），按需修改
+#   Copy-Item application-local.yml.example application-local.yml
+#
+# 这个文件故意不写任何真实口令，占位符全部通过环境变量注入。
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/kb_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+
+  ai:
+    openai:
+      base-url: ${SPRING_AI_OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
+      api-key: ${SPRING_AI_OPENAI_API_KEY:sk-placeholder}
+      chat:
+        options:
+          model: ${KB_AI_CHAT_MODEL:qwen-plus}
+          temperature: 0.3
+      embedding:
+        options:
+          model: ${KB_AI_EMBEDDING_MODEL:text-embedding-v3}
+
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        options:
+          model: ${OLLAMA_CHAT_MODEL:qwen2.5:3b}
+          temperature: 0.3
+
+kb:
+  jwt:
+    # 生产环境必须换成随机长密钥：openssl rand -base64 48
+    secret: ${KB_JWT_SECRET:}
+
+  vector:
+    datasource:
+      driver-class-name: org.postgresql.Driver
+      url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/kb_vector
+      username: ${POSTGRES_USER:postgres}
+      password: ${POSTGRES_PASSWORD:}
+
+  ai:
+    base-url: ${SPRING_AI_OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
+    # 留空则使用 MockAiClient，不调用任何外部模型（适合纯本地演示）
+    api-key: ${KB_AI_API_KEY:}
+    chat-model: ${KB_AI_CHAT_MODEL:qwen-plus}
+    embedding-model: ${KB_AI_EMBEDDING_MODEL:text-embedding-v3}
+
+logging:
+  level:
+    com.example.kb: debug

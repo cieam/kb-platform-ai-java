@@ -1,0 +1,147 @@
+# =============================================================
+# 公共配置：所有环境共用，不含任何连接串与密钥。
+# 环境相关的配置（数据库 / Redis / pgvector / 大模型 Key）放在
+# application-local.yml、application-prod.yml 里，按 profile 加载。
+#
+# 默认激活 local；部署时用环境变量或启动参数覆盖：
+#   java -jar app.jar --spring.profiles.active=prod
+#   $env:SPRING_PROFILES_ACTIVE='prod'
+# =============================================================
+server:
+  port: 8080
+
+spring:
+  application:
+    name: kb-platform
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    default-property-inclusion: non_null
+  web:
+    resources:
+      static-locations: classpath:/static/
+
+  # MCP Server：把知识库检索能力暴露成标准工具供外部客户端接入。
+  # protocol 可选 STDIO / SSE：Web 工程用 SSE，桌面客户端可用 STDIO。
+  ai:
+    mcp:
+      server:
+        name: kb-mcp-server
+        version: 1.0.0
+        protocol: SSE
+        sse-endpoint: /mcp/sse
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+kb:
+  jwt:
+    # secret 属于环境配置，见 application-local.yml
+    expire-minutes: 720
+
+  # 大模型相关的非环境参数；base-url / api-key / 模型名在 profile 文件里
+  ai:
+    embedding-dim: 1024
+    # 一次请求算多少条向量，以及单批失败后的重试次数
+    embedding-batch-size: 16
+    max-retries: 3
+    top-k: 5
+    # 本地小模型：简单问题交给 Ollama，复杂问题才走云端
+    local:
+      enabled: ${KB_AI_LOCAL_ENABLED:true}
+      model: ${OLLAMA_CHAT_MODEL:qwen2.5:3b}
+      # 问题不超过这个长度、且不含复杂意图词，才走本地
+      max-question-length: 40
+    # 多模型注册表：priority 小的优先，未配置 Key 的自动跳过。
+    # 这里只写端点和模型名，Key 全部走环境变量，仓库里不落任何密钥。
+    providers:
+      - name: qwen
+        type: openai
+        base-url: https://dashscope.aliyuncs.com/compatible-mode
+        api-key: ${DASHSCOPE_API_KEY:}
+        model: ${KB_AI_CHAT_MODEL:qwen-plus}
+        priority: 1
+      - name: deepseek
+        type: openai
+        base-url: https://api.deepseek.com
+        api-key: ${DEEPSEEK_API_KEY:}
+        model: deepseek-chat
+        priority: 2
+      - name: kimi
+        type: openai
+        base-url: https://api.moonshot.cn
+        api-key: ${MOONSHOT_API_KEY:}
+        model: moonshot-v1-8k
+        priority: 3
+      - name: openai
+        type: openai
+        base-url: https://api.openai.com
+        api-key: ${OPENAI_API_KEY:}
+        model: gpt-4o-mini
+        priority: 4
+      - name: ollama
+        type: ollama
+        base-url: http://localhost:11434
+        api-key: ""
+        model: ${OLLAMA_CHAT_MODEL:qwen2.5:3b}
+        priority: 9
+
+  # 对话记忆：Spring AI ChatMemory + 自研持久化（Redis 热 + MySQL 冷 + Kryo 序列化）
+  memory:
+    # 注入 Prompt 的最近消息条数
+    window: 20
+    # Redis 里记忆的存活时间，单位分钟
+    ttl-minutes: 120
+    redis-prefix: "kb:memory:"
+    # 冷启动时从 kb_message 表回填多少条历史
+    seed-messages: 6
+
+  # 检索策略
+  retrieval:
+    # vector：只走向量召回（想对比效果时改成它）；hybrid：向量 + 关键词双路召回后 RRF 融合
+    mode: hybrid
+    vector-top-k: 20
+    keyword-top-k: 20
+    rrf-k: 60
+    keyword-candidate-limit: 200
+
+  # 缓存：命中后不检索、不调模型，直接回放答案
+  cache:
+    answer:
+      enabled: true
+      ttl-minutes: 30
+
+  # 切分参数
+  chunk:
+    size: 800
+    overlap: 150
+
+  storage:
+    # local：存本地磁盘；后续可换成 minio
+    type: local
+    local-path: ./data/files
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+logging:
+  level:
+    com.example.kb: info
