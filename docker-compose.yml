@@ -1,0 +1,88 @@
+# 单体项目只依赖三个中间件，一条命令全部拉起
+#   docker compose up -d
+#
+# 本机 3306 / 6379 已经被占用时（比如自己装了 MySQL、Redis），
+# 用环境变量换宿主端口即可，不需要改这个文件：
+#   $env:MYSQL_PORT=13306; $env:REDIS_PORT=16379; docker compose up -d
+# 应用侧读的是同一批环境变量，所以不用改 application.yml。
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: kb-mysql
+    # 本机已经装了 MySQL 时不需要这个容器（会抢 3306 端口），所以默认不启动。
+    # 想用容器里的 MySQL：docker compose --profile with-mysql up -d
+    profiles: ["with-mysql"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:-123456}
+      MYSQL_DATABASE: kb_platform
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - ./sql:/docker-entrypoint-initdb.d
+      - kb-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_PASSWORD:-123456}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    container_name: kb-redis
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-redis123}"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - kb-redis-data:/data
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: kb-postgres
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      POSTGRES_DB: kb_vector
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ./sql-pg:/docker-entrypoint-initdb.d
+      - kb-pg-data:/var/lib/postgresql/data
+
+  # 应用本体。默认不启动，需要时显式开 profile：
+  #   docker compose --profile with-mysql --profile app up -d
+  app:
+    build:
+      context: .
+    container_name: kb-app
+    profiles: ["app"]
+    depends_on:
+      - redis
+      - postgres
+    environment:
+      # MySQL 用宿主机上的（容器内用 host.docker.internal 回指）
+      MYSQL_HOST: host.docker.internal
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-root}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-123456}
+      # Redis / PostgreSQL 走 compose 内网，用服务名 + 容器端口
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis123}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      # 不配 Key 时自动降级为本地模拟实现，容器照样能起来
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8080:8080"
+
+volumes:
+  kb-mysql-data:
+  kb-redis-data:
+  kb-pg-data:

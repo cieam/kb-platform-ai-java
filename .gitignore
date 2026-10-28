@@ -1,0 +1,30 @@
+# ===== 构建产物 =====
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.iml
+.settings/
+.classpath
+.project
+
+# ===== 本地环境配置：含口令，绝不入库 =====
+# 新克隆的人请复制 application-local.yml.example 为 application-local.yml 再改
+application-local.yml
+application-local.yaml
+.env
+*.local
+
+# ===== 运行产物 =====
+run-logs/
+logs/
+data/
+*.log
+
+# ===== 系统文件 =====
+.DS_Store
+Thumbs.db
