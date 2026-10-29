@@ -1,5 +1,5 @@
 # kb-platform · 企业级 AI 知识库问答系统
-
+（大部分代码由ai生成，上传了演示视频）
 [![CI](https://github.com/USER/kb-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/USER/kb-platform/actions/workflows/ci.yml)
 ![Java](https://img.shields.io/badge/Java-17-orange)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4-brightgreen)
