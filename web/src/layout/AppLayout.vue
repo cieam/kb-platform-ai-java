@@ -38,7 +38,10 @@
               :value="kb.id"
             />
           </el-select>
-          <el-button link type="primary" @click="$router.push('/kb')">管理</el-button>
+          <!-- 已经在知识库页面时隐藏：点了也是跳当前页，看起来会像“没反应” -->
+          <el-button v-if="route.name !== 'kb'" link type="primary" @click="$router.push('/kb')">
+            管理
+          </el-button>
           <el-tag v-if="!kbStore.list.length" type="warning" effect="light" size="small">
             还没有知识库，请先到「知识库」新建
           </el-tag>
