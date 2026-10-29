@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  build-and-test:
+  backend:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,7 +19,7 @@ jobs:
           java-version: '17'
           cache: maven
 
-      # 单元测试不依赖数据库：HydridRetriever / RRF / Kryo / 模型路由都是纯逻辑
+      # 单元测试不依赖数据库：模型路由 / RRF / Kryo / 切分都是纯逻辑
       - name: Build and test
         run: mvn -B -ntp verify
 
@@ -30,3 +30,31 @@ jobs:
           name: surefire-reports
           path: target/surefire-reports/
           if-no-files-found: ignore
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # 构建产物会写到 ../src/main/resources/static，顺手验证前后端相对路径是对的
+      - name: Build
+        run: pnpm build

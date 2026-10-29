@@ -84,7 +84,7 @@ docker compose --profile with-mysql --profile app up -d
 | 存储 | MySQL 8（业务 + 记忆冷存）、Redis 7（缓存 + 记忆热存）、PostgreSQL 16 + pgvector（向量） |
 | 文档解析 | Apache Tika 2.9 |
 | 序列化 | Jackson、Kryo 5 |
-| 前端 | Vue 3 + Element Plus + Vite（仓库 [kb-web](https://github.com/USER/kb-web)） |
+| 前端 | Vue 3 + Element Plus + Vite（同仓库 [web/](web/)） |
 
 ## 目录结构
 
@@ -100,7 +100,8 @@ kb-platform/
 │   └── config/        # 数据源、鉴权、线程池、配置项
 ├── docs/              # 模块说明、工作流程、改造记录
 ├── sql/  sql-pg/      # MySQL 与 PostgreSQL 建表脚本
-└── tools/             # 本地 mock 大模型服务（无 Key 联调用）
+├── tools/             # 本地 mock 大模型服务（无 Key 联调用）
+└── web/               # 前端工程（Vue 3 + Vite + Element Plus），构建产物写入 src/main/resources/static
 ```
 
 ## 文档
@@ -147,7 +148,7 @@ mvn spring-boot:run
 启动后：
 
 - **前端页面**：<http://localhost:8080/> —— Vue 3 单页应用，登录 / 知识库 / 文档 / 问答四个界面。
-  源码在同级目录 `kb-web`，`pnpm build` 的产物会输出到本工程的 `src/main/resources/static`
+  源码在同仓库的 `web/` 目录，`pnpm build` 的产物会输出到本工程的 `src/main/resources/static`
 - **接口文档**：<http://localhost:8080/doc.html>
 - **演示账号**：`admin / 123456`（由 `DataInitializer` 在首次启动时创建）
 
@@ -269,7 +270,7 @@ kb-platform                        后端（单体）
     └── test/java/com/example/kb 单元测试
 ```
 
-前端在**同级目录** `kb-web`（Vue 3 + Vite + Element Plus），构建产物输出到上面的 `static` 目录。
+前端在**同仓库的** `web/` 目录（Vue 3 + Vite + Element Plus），构建产物输出到上面的 `static` 目录。
 
 ## 七、检索策略怎么调
 
@@ -320,16 +321,16 @@ kb-platform                        后端（单体）
 这样简历上的「Spring AI」就是真的，而且你能讲清「换实现只动了一个类」。
 
 
-## 十一、前端工程（kb-web）
+## 十一、前端工程（web/）
 
-前端是独立的 Vue 3 工程，位于同级目录 `kb-web`。
+前端与后端在同一个仓库，位于 `web/` 目录。
 
 | 项 | 说明 |
 |---|---|
 | 技术栈 | Vue 3（`<script setup>`）+ Vite 5 + Element Plus 2 + Pinia + Vue Router 4 + Axios + markdown-it |
 | 界面 | 登录/注册、知识库管理、文档管理、智能问答 四个页面 |
-| 开发 | `cd ../kb-web && pnpm install && pnpm dev` → <http://localhost:5173>，`/api` 自动代理到 8080 |
-| 构建 | `cd ../kb-web && pnpm build` → 产物直接写进本工程 `src/main/resources/static` |
+| 开发 | `cd web && pnpm install && pnpm dev` → <http://localhost:5173>，`/api` 自动代理到 8080 |
+| 构建 | `cd web && pnpm build` → 产物直接写进本工程 `src/main/resources/static` |
 
 **打包顺序**：先 `pnpm build`（前端），再 `mvn clean package`（后端），一个 jar 就是完整应用，
 不需要 Nginx，也不需要配 CORS。
@@ -367,7 +368,7 @@ docker compose up -d redis postgres
 java -jar target/kb-platform-1.0.0.jar --server.port=8085
 
 # 前端开发模式也要跟着改代理
-cd ..\kb-web; $env:VITE_API_TARGET='http://localhost:8085'; pnpm dev
+cd web; $env:VITE_API_TARGET='http://localhost:8085'; pnpm dev
 ```
 
 微服务那一侧照常（见 `shop-cloud/start-local.ps1`）。
@@ -506,7 +507,7 @@ java -jar target/kb-platform-1.0.0.jar
 开发模式（推荐，改代码热更新）：
 
 ```powershell
-cd kb-web
+cd web
 pnpm install        # 首次
 pnpm dev            # http://localhost:5173
 ```
@@ -520,7 +521,7 @@ $env:VITE_API_TARGET='http://localhost:8085'; pnpm dev
 生产模式（前后端一起打成一个 jar）：
 
 ```powershell
-cd kb-web
+cd web
 pnpm build          # 输出到 ../kb-platform/src/main/resources/static
 cd ..\kb-platform
 mvn -DskipTests package

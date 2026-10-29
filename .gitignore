@@ -25,6 +25,11 @@ logs/
 data/
 *.log
 
+# ===== 前端（web/ 目录）=====
+web/node_modules/
+web/dist/
+web/.vite/
+
 # ===== 系统文件 =====
 .DS_Store
 Thumbs.db
